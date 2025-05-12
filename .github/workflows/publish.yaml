@@ -62,12 +62,24 @@ jobs:
   #         NODE_AUTH_TOKEN: ${{secrets.npm_token}}
 
 
-  publish-github:
+  publish-ghcr:
     needs: build
     runs-on: ubuntu-latest
-    env:
-      PLATFORMS: linux/amd64,linux/arm/v7,linux/arm64
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
     steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
       - name: Image Metadata
         id: image-metadata
         uses: docker/metadata-action@v4
@@ -78,26 +90,19 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{version}}
 
-      - name: Production Image Build
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
-          tags: ${{ steps.image-metadata.outputs.tags }}
-          labels: ${{ steps.image-metadata.outputs.labels }}
-          containerfiles: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          oci: true
-          # enable build layer caching between platforms
-          layers: true
-          # Webpack seems to use a lot of open files, increase the max open file limit to accomodate.
-          extra-args: |
-            --ulimit nofile=10000
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Publish to GHCR
-        uses: redhat-actions/push-to-registry@v2
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
         with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          subject-name: index.docker.io/my-docker-hub-namespace/my-docker-hub-repository
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
