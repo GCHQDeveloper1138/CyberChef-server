@@ -28,9 +28,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # docker image tags need to be lowercase so use this helper function to convert
+      - id: toLowerCase
+        uses: vishalmamidi/lowercase-action@v1
+        with:
+          string: ${{ env.IMAGE_NAME }}
+
       - name: Build an image from Dockerfile
         run: |
-          docker build -t  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t  ${{ env.REGISTRY }}/${{ steps.toLowerCase.outputs.lowercase }}:${{ github.sha }} .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
